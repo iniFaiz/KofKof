@@ -247,7 +247,7 @@ onUnmounted(() => {
         </div>
       </div>
       <!-- From Uiverse.io by aguerquin -->
-      <a href="https://github.com/iniFaiz" target="_blank" rel="noopener noreferrer" class="inline-block">
+      <a href="https://github.com/iniFaiz/KofKof" target="_blank" rel="noopener noreferrer" class="inline-block">
         <div class="mt-20 mb-20 button-icon">
           <div class="icon">
             <svg viewBox="0 0 24 24">
