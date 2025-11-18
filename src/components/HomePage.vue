@@ -1,9 +1,15 @@
 <script setup>
 import { ref, onUnmounted, nextTick } from "vue";
+import axios from "axios";
+import PopUpPage from "./PopUpPage.vue";
 
 const isRecording = ref(false);
 const canvasRef = ref(null);
 const recordingTime = ref(10);
+const showCoughAnalysisPopup = ref(false);
+const analysisResult = ref(null);
+const analysisError = ref(null);
+
 let audioContext = null;
 let analyser = null;
 let microphone = null;
@@ -11,6 +17,8 @@ let animationId = null;
 let mediaStream = null;
 let silenceTimeout = null;
 let recordingTimer = null;
+let mediaRecorder = null;
+let audioChunks = [];
 let lastSoundTime = Date.now();
 
 const SILENCE_THRESHOLD = 10; // Minimum audio level to detect sound
@@ -19,10 +27,8 @@ const MAX_RECORDING_TIME = 10; // 10 seconds maximum recording time
 
 const startRecording = async () => {
   try {
-    // Request microphone access
     mediaStream = await navigator.mediaDevices.getUserMedia({ audio: true });
 
-    // Create audio context
     audioContext = new (window.AudioContext || window.webkitAudioContext)();
     analyser = audioContext.createAnalyser();
     microphone = audioContext.createMediaStreamSource(mediaStream);
@@ -31,11 +37,19 @@ const startRecording = async () => {
     analyser.smoothingTimeConstant = 0.8;
     microphone.connect(analyser);
 
+    // Setup MediaRecorder
+    audioChunks = [];
+    mediaRecorder = new MediaRecorder(mediaStream);
+    mediaRecorder.ondataavailable = (event) => {
+      audioChunks.push(event.data);
+    };
+    mediaRecorder.onstop = sendAudioToBackend;
+    mediaRecorder.start();
+
     isRecording.value = true;
     recordingTime.value = MAX_RECORDING_TIME;
     lastSoundTime = Date.now();
 
-    // Start countdown timer
     recordingTimer = setInterval(() => {
       recordingTime.value--;
       if (recordingTime.value <= 0) {
@@ -43,7 +57,6 @@ const startRecording = async () => {
       }
     }, 1000);
 
-    // Wait for DOM to update before visualizing
     await nextTick();
     visualize();
   } catch (err) {
@@ -53,54 +66,84 @@ const startRecording = async () => {
 };
 
 const stopRecording = () => {
+  if (!isRecording.value) return;
+  
   isRecording.value = false;
 
-  if (animationId) {
-    cancelAnimationFrame(animationId);
+  if (mediaRecorder && mediaRecorder.state === "recording") {
+    mediaRecorder.stop();
   }
 
-  if (recordingTimer) {
-    clearInterval(recordingTimer);
-    recordingTimer = null;
-  }
+  if (animationId) cancelAnimationFrame(animationId);
+  if (recordingTimer) clearInterval(recordingTimer);
+  if (silenceTimeout) clearTimeout(silenceTimeout);
+  if (microphone) microphone.disconnect();
+  if (audioContext) audioContext.close();
+  if (mediaStream) mediaStream.getTracks().forEach((track) => track.stop());
 
-  if (silenceTimeout) {
-    clearTimeout(silenceTimeout);
-  }
-
-  if (microphone) {
-    microphone.disconnect();
-  }
-
-  if (audioContext) {
-    audioContext.close();
-  }
-
-  if (mediaStream) {
-    mediaStream.getTracks().forEach((track) => track.stop());
-  }
-
-  // Clear canvas
   if (canvasRef.value) {
     const canvas = canvasRef.value;
     const canvasCtx = canvas.getContext("2d");
     canvasCtx.clearRect(0, 0, canvas.width, canvas.height);
   }
+  
+  // Show popup in loading state
+  analysisResult.value = null;
+  analysisError.value = null;
+  showCoughAnalysisPopup.value = true;
+};
+
+const sendAudioToBackend = async () => {
+  // Coba rekam sebagai WAV, jika tidak bisa, biarkan default browser
+  const mimeType = MediaRecorder.isTypeSupported('audio/wav; codecs=opus') 
+    ? 'audio/wav; codecs=opus' 
+    : 'audio/webm';
+  const audioBlob = new Blob(audioChunks, { type: mimeType });
+  const formData = new FormData();
+  formData.append("file", audioBlob, "cough.wav");
+
+  try {
+    const response = await axios.post("http://localhost:8000/predict", formData, {
+      headers: {
+        "Content-Type": "multipart/form-data",
+      },
+    });
+    analysisResult.value = response.data;
+    analysisError.value = null; // Pastikan error di-reset jika berhasil
+  } catch (error) {
+    console.error("Error sending audio to backend:", error);
+    if (error.response) {
+      // Server merespons dengan status error (4xx, 5xx)
+      console.error("Backend Response Data:", error.response.data);
+      analysisError.value = `Backend error: ${error.response.data.error || 'Unknown error'}`;
+    } else if (error.request) {
+      // Request dibuat tapi tidak ada respons (masalah jaringan, CORS)
+      console.error("No response received:", error.request);
+      analysisError.value = "Could not connect to the server. Please check your network and CORS settings.";
+    } else {
+      // Error lain saat setup request
+      console.error("Error setting up request:", error.message);
+      analysisError.value = "An unexpected error occurred. Please try again.";
+    }
+  }
+};
+
+const closePopup = () => {
+  showCoughAnalysisPopup.value = false;
+  analysisResult.value = null;
+  analysisError.value = null;
 };
 
 const checkForSilence = (dataArray) => {
-  // Calculate average volume
   const average = dataArray.reduce((a, b) => a + b, 0) / dataArray.length;
 
   if (average > SILENCE_THRESHOLD) {
-    // Sound detected, reset timer
     lastSoundTime = Date.now();
     if (silenceTimeout) {
       clearTimeout(silenceTimeout);
       silenceTimeout = null;
     }
   } else {
-    // Check if silence duration exceeded
     const silenceDuration = Date.now() - lastSoundTime;
     if (silenceDuration >= SILENCE_DURATION && !silenceTimeout) {
       console.log("5 seconds of silence detected, stopping recording");
@@ -111,28 +154,18 @@ const checkForSilence = (dataArray) => {
 
 const visualize = () => {
   const canvas = canvasRef.value;
-  if (!canvas) {
-    console.error("Canvas not found");
-    return;
-  }
+  if (!canvas) return;
 
   const canvasCtx = canvas.getContext("2d");
   const bufferLength = analyser.frequencyBinCount;
   const dataArray = new Uint8Array(bufferLength);
 
-  console.log("Starting visualization, bufferLength:", bufferLength);
-
   const draw = () => {
     if (!isRecording.value) return;
-
     animationId = requestAnimationFrame(draw);
-
     analyser.getByteFrequencyData(dataArray);
-
-    // Check for silence
     checkForSilence(dataArray);
 
-    // Clear canvas with white background
     canvasCtx.fillStyle = "#ffffff";
     canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
 
@@ -142,11 +175,8 @@ const visualize = () => {
 
     for (let i = 0; i < bufferLength; i++) {
       barHeight = (dataArray[i] / 255) * canvas.height * 0.8;
-
-      // Draw blue bars
       canvasCtx.fillStyle = "#3b82f6";
       canvasCtx.fillRect(x, canvas.height - barHeight, barWidth - 1, barHeight);
-
       x += barWidth;
     }
   };
@@ -202,7 +232,7 @@ onUnmounted(() => {
           height="100"
           class="w-full border border-gray-300 rounded"
         ></canvas>
-        <p class="mt-2 text-lg text-center text-gray-600">Listening...</p>
+        <p class="mt-2 text-lg text-center text-gray-600">Listening... ({{ recordingTime }}s left)</p>
       </div>
 
       <button
@@ -211,6 +241,13 @@ onUnmounted(() => {
         class="block py-3 mx-auto text-2xl text-white bg-blue-500 rounded px-7 hover:bg-blue-700"
       >
         Begin Test
+      </button>
+       <button
+        v-else
+        @click="toggleRecording"
+        class="block py-3 mx-auto text-2xl text-white bg-red-500 rounded px-7 hover:bg-red-700"
+      >
+        Stop Test
       </button>
 
       <div class="container02">
@@ -265,6 +302,12 @@ onUnmounted(() => {
       </a>
     </div>
   </div>
+  <PopUpPage 
+    :show="showCoughAnalysisPopup" 
+    :result="analysisResult"
+    :error="analysisError"
+    @close="closePopup" 
+  />
 </template>
 
 <style></style>
