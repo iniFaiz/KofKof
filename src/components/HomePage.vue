@@ -9,6 +9,7 @@ const recordingTime = ref(10);
 const showCoughAnalysisPopup = ref(false);
 const analysisResult = ref(null);
 const analysisError = ref(null);
+const API_URL = "https://razi404-kofkof-api.hf.space";
 
 let audioContext = null;
 let analyser = null;
@@ -103,7 +104,7 @@ const sendAudioToBackend = async () => {
   formData.append("file", audioBlob, "cough.wav");
 
   try {
-    const response = await axios.post("http://localhost:8000/predict", formData, {
+    const response = await axios.post(`${API_URL}/predict`, formData, {
       headers: {
         "Content-Type": "multipart/form-data",
       },
