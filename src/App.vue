@@ -1,9 +1,11 @@
 <script setup>
 import HomePage from './components/HomePage.vue'
+import WarningPopUpPage from './components/WarningPopUpPage.vue'
 </script>
 
 <template>
   <HomePage />
+  <WarningPopUpPage />
 </template>
 
 <style>
@@ -21,6 +23,14 @@ import HomePage from './components/HomePage.vue'
   margin: 0 auto;
   max-width: 100%;
 }
+
+@media (max-width: 768px) {
+  .container {
+    display: block;
+    padding: 20px;
+  }
+}
+
 .main { 
   grid-area: Main;
 }

@@ -9,7 +9,7 @@ const recordingTime = ref(10);
 const showCoughAnalysisPopup = ref(false);
 const analysisResult = ref(null);
 const analysisError = ref(null);
-const API_URL = "https://razi404-kofkof-api.hf.space";
+const API_URL = import.meta.env.VITE_API_URL;
 
 let audioContext = null;
 let analyser = null;
@@ -217,8 +217,7 @@ onUnmounted(() => {
             identify its type (e.g., dry, wet, productive). It is designed to
             help you understand your symptoms and better describe them to a
             healthcare professional. For an accurate reading, please cough
-            clearly into your microphone for 10 seconds. The entire test is done
-            on your device for your privacy; we do not store any recordings or
+            clearly into your microphone for 10 seconds. We do not store any recordings or
             results.
           </p>
         </div>
@@ -230,7 +229,7 @@ onUnmounted(() => {
         <canvas
           ref="canvasRef"
           width="700"
-          height="100"
+          height="200"
           class="w-full border border-gray-300 rounded"
         ></canvas>
         <p class="mt-2 text-lg text-center text-gray-600">Listening... ({{ recordingTime }}s left)</p>
@@ -252,13 +251,13 @@ onUnmounted(() => {
       </button>
 
       <div class="container02">
-        <h2 class="mt-40 mb-4 text-2xl font-bold">FAQ</h2>
+        <h2 class="mt-20 mb-4 text-2xl font-bold md:mt-40">FAQ</h2>
 
         <div class="wrapper">
           <p>
             <strong>What is this tool?</strong> This tool analyzes the acoustic
-            signature of your cough to help identify its type (e.g., dry, wet,
-            productive). It is designed to help you understand your symptoms and
+            signature of your cough to help identify its type (e.g., dry, wet). 
+            It is designed to help you understand your symptoms and
             better describe them to a healthcare professional.
           </p>
           <p>
@@ -279,8 +278,7 @@ onUnmounted(() => {
             for professional medical advice from a doctor or other qualified healthcare provider.
           </p>
           <p>
-            <strong>Is my data private?</strong> Yes, all processing is done on
-            your device. We do not store any recordings or results.
+            <strong>Is my data private?</strong> Yes. I (faiz) do not store any recordings or results.
           </p>
         </div>
       </div>
