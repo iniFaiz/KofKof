@@ -21,6 +21,7 @@ let recordingTimer = null;
 let mediaRecorder = null;
 let audioChunks = [];
 let lastSoundTime = Date.now();
+let hasDetectedSound = false;
 
 const SILENCE_THRESHOLD = 10; // Minimum audio level to detect sound
 const SILENCE_DURATION = 5000; // 5 seconds of silence
@@ -40,6 +41,7 @@ const startRecording = async () => {
 
     // Setup MediaRecorder
     audioChunks = [];
+    hasDetectedSound = false;
     mediaRecorder = new MediaRecorder(mediaStream);
     mediaRecorder.ondataavailable = (event) => {
       audioChunks.push(event.data);
@@ -95,6 +97,11 @@ const stopRecording = () => {
 };
 
 const sendAudioToBackend = async () => {
+  if (!hasDetectedSound) {
+    analysisError.value = "We didn't hear any sound. Please try coughing clearly into the microphone.";
+    return;
+  }
+
   // Coba rekam sebagai WAV, jika tidak bisa, biarkan default browser
   const mimeType = MediaRecorder.isTypeSupported('audio/wav; codecs=opus') 
     ? 'audio/wav; codecs=opus' 
@@ -140,6 +147,7 @@ const checkForSilence = (dataArray) => {
 
   if (average > SILENCE_THRESHOLD) {
     lastSoundTime = Date.now();
+    hasDetectedSound = true;
     if (silenceTimeout) {
       clearTimeout(silenceTimeout);
       silenceTimeout = null;
@@ -231,6 +239,8 @@ onUnmounted(() => {
           width="700"
           height="200"
           class="w-full border border-gray-300 rounded"
+          role="img"
+          aria-label="Audio visualizer showing sound wave animation"
         ></canvas>
         <p class="mt-2 text-lg text-center text-gray-600">Listening... ({{ recordingTime }}s left)</p>
       </div>
@@ -239,6 +249,7 @@ onUnmounted(() => {
         v-if="!isRecording"
         @click="toggleRecording"
         class="block py-3 mx-auto text-2xl text-white bg-blue-500 rounded px-7 hover:bg-blue-700"
+        aria-label="Start recording cough sound"
       >
         Begin Test
       </button>
@@ -246,6 +257,7 @@ onUnmounted(() => {
         v-else
         @click="toggleRecording"
         class="block py-3 mx-auto text-2xl text-white bg-red-500 rounded px-7 hover:bg-red-700"
+        aria-label="Stop recording cough sound"
       >
         Stop Test
       </button>

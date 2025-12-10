@@ -125,10 +125,13 @@ export default {
     },
   },
   watch: {
-    result(newResult) {
-      if (newResult) {
-        this.processResults();
-      }
+    result: {
+      handler(newResult) {
+        if (newResult) {
+          this.processResults();
+        }
+      },
+      immediate: true
     }
   }
 };
